@@ -1,129 +1,137 @@
 import streamlit as st
-import hashlib, json, base64, time
+import json
+import hashlib
 from cryptography.fernet import Fernet
-from pathlib import Path
+from base64 import urlsafe_b64encode
 
-DATA_FILE = Path("draft_data.json")
+# ---------------- CONFIG ----------------
+ADMIN_PASSWORD = "admin123"  # change this
+DATA_FILE = "data.json"
 
-# ---------- Crypto helpers ----------
-def derive_key(password):
-    return base64.urlsafe_b64encode(
-        hashlib.sha256(password.encode()).digest()
-    )
+# ---------------- HELPERS ----------------
+def load_data():
+    try:
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {
+            "registry_locked": False,
+            "users": [],
+            "commits": {},
+            "confirmations": []
+        }
 
-def encrypt(data, password):
-    return Fernet(derive_key(password)).encrypt(data.encode()).decode()
+def save_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f, indent=2)
 
-def decrypt(token, password):
-    return Fernet(derive_key(password)).decrypt(token.encode()).decode()
+def derive_key(password: str):
+    digest = hashlib.sha256(password.encode()).digest()
+    return urlsafe_b64encode(digest)
 
-def sha256(text):
-    return hashlib.sha256(text.encode()).hexdigest()
+def encrypt_data(data, password):
+    key = derive_key(password)
+    return Fernet(key).encrypt(json.dumps(data).encode()).decode()
 
-# ---------- Storage ----------
-def load():
-    if DATA_FILE.exists():
-        return json.loads(DATA_FILE.read_text())
-    return {"submissions": {}, "reveal_confirmed": []}
+def decrypt_data(token, password):
+    key = derive_key(password)
+    return json.loads(Fernet(key).decrypt(token.encode()).decode())
 
-def save(data):
-    DATA_FILE.write_text(json.dumps(data, indent=2))
+# ---------------- APP ----------------
+st.set_page_config(page_title="Secret Draft Commit", layout="centered")
+st.title("🔐 Secret Draft Commit & Reveal")
 
-data = load()
+data = load_data()
 
-# ---------- UI ----------
-st.set_page_config("Secret Draft App", layout="centered")
-st.title("🔐 Secret Draft Submission")
+# ---------------- ADMIN PANEL ----------------
+with st.sidebar:
+    st.header("Admin Panel")
+    admin_pass = st.text_input("Admin Password", type="password")
 
-phase = st.radio(
-    "Phase",
-    ["Commit Picks", "Confirm Reveal", "Reveal Picks"]
-)
+    if admin_pass == ADMIN_PASSWORD:
+        st.success("Admin authenticated")
 
-# ---------- PHASE 1: COMMIT ----------
-if phase == "Commit Picks":
-    st.subheader("Submit Your Picks (Locked)")
+        if not data["registry_locked"]:
+            new_user = st.text_input("Add Player Name")
+            if st.button("Add Player"):
+                if new_user and new_user not in data["users"]:
+                    data["users"].append(new_user)
+                    save_data(data)
+                    st.success(f"{new_user} added")
 
-    user = st.text_input("Username")
-    password = st.text_input("Password (DO NOT FORGET)", type="password")
+            if st.button("🔒 Lock Registry"):
+                data["registry_locked"] = True
+                save_data(data)
+                st.warning("Registry locked")
 
-    st.markdown("### 🏆 Epic Players (Priority 1–2)")
-    epic = {}
-    for i in range(1, 3):
-        epic[f"priority_{i}"] = st.text_input(f"Epic Player {i}")
-
-    st.markdown("### ⭐ Featured Players (Priority 1–4)")
-    featured = {}
-    for i in range(1, 5):
-        featured[f"priority_{i}"] = st.text_input(f"Featured Player {i}")
-
-    if st.button("Lock Picks"):
-        if not user or not password:
-            st.error("Username and password required")
-        elif user in data["submissions"]:
-            st.error("You have already submitted")
         else:
-            payload = {
-                "epic": epic,
-                "featured": featured,
-                "submitted_at": time.time()
+            st.info("Registry already locked")
+
+# ---------------- REGISTRY VIEW ----------------
+st.subheader("Registered Players")
+st.write(data["users"])
+
+if not data["registry_locked"]:
+    st.warning("Waiting for admin to lock registry.")
+    st.stop()
+
+# ---------------- USER SUBMISSION ----------------
+st.subheader("Submit Your Picks")
+
+username = st.selectbox("Your Name", [""] + data["users"])
+password = st.text_input("Your Password", type="password")
+
+if username in data["commits"]:
+    st.info("You have already submitted your encrypted picks.")
+else:
+    st.markdown("### Epic Players (2)")
+    epic1 = st.text_input("Epic Player 1")
+    epic2 = st.text_input("Epic Player 2")
+
+    st.markdown("### Featured Players (4)")
+    f1 = st.text_input("Featured Player 1")
+    f2 = st.text_input("Featured Player 2")
+    f3 = st.text_input("Featured Player 3")
+    f4 = st.text_input("Featured Player 4")
+
+    if st.button("🔐 Encrypt & Submit"):
+        if not username or not password:
+            st.error("Name and password required")
+        else:
+            picks = {
+                "epic": [epic1, epic2],
+                "featured": [f1, f2, f3, f4]
             }
+            encrypted = encrypt_data(picks, password)
+            data["commits"][username] = encrypted
+            save_data(data)
+            st.success("Picks encrypted & submitted")
 
-            plaintext = json.dumps(payload, sort_keys=True)
-            encrypted = encrypt(plaintext, password)
-            commit_hash = sha256(encrypted)
+# ---------------- CONFIRM REVEAL ----------------
+st.subheader("Reveal Confirmation")
 
-            data["submissions"][user] = {
-                "encrypted": encrypted,
-                "hash": commit_hash
-            }
-            save(data)
+if username and username not in data["confirmations"]:
+    if st.button("✅ Confirm Reveal"):
+        data["confirmations"].append(username)
+        save_data(data)
+        st.success("Confirmation recorded")
 
-            st.success("✅ Picks locked")
-            st.code(f"Commit hash:\n{commit_hash}")
+st.write(f"Confirmations: {len(data['confirmations'])}/{len(data['users'])}")
 
-# ---------- PHASE 2: CONFIRM ----------
-elif phase == "Confirm Reveal":
-    st.subheader("Confirm Reveal")
+# ---------------- REVEAL ----------------
+if len(data["confirmations"]) == len(data["users"]):
+    st.subheader("🎉 REVEAL PHASE")
 
-    user = st.selectbox(
-        "Select your username",
-        list(data["submissions"].keys())
-    )
+    reveal_user = st.selectbox("Reveal Your Picks", [""] + data["users"])
+    reveal_pass = st.text_input("Your Password for Reveal", type="password", key="reveal")
 
-    if st.button("Confirm"):
-        if user not in data["reveal_confirmed"]:
-            data["reveal_confirmed"].append(user)
-            save(data)
-        st.success("Confirmed")
-
-    st.info(
-        f"Confirmed: {len(data['reveal_confirmed'])} / "
-        f"{len(data['submissions'])}"
-    )
-
-# ---------- PHASE 3: REVEAL ----------
-elif phase == "Reveal Picks":
-    st.subheader("Reveal (Only After All Confirmed)")
-
-    if set(data["reveal_confirmed"]) != set(data["submissions"].keys()):
-        st.warning("Waiting for all users to confirm reveal")
-    else:
-        user = st.selectbox("Select user", data["submissions"].keys())
-        password = st.text_input("Password", type="password")
-
-        if st.button("Reveal"):
-            try:
-                encrypted = data["submissions"][user]["encrypted"]
-                original_hash = data["submissions"][user]["hash"]
-
-                decrypted = decrypt(encrypted, password)
-                if sha256(encrypted) != original_hash:
-                    st.error("❌ Hash mismatch")
-                else:
-                    picks = json.loads(decrypted)
-                    st.success("✅ Verified Picks")
-                    st.json(picks)
-
-            except Exception:
-                st.error("Wrong password")
+    if st.button("🔓 Decrypt"):
+        try:
+            encrypted = data["commits"][reveal_user]
+            decrypted = decrypt_data(encrypted, reveal_pass)
+            st.success("Decrypted Successfully")
+            st.json(decrypted)
+        except:
+            st.error("Wrong password or corrupted data")
+else:
+    st.info("Waiting for all confirmations before reveal.")
