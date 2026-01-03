@@ -262,7 +262,7 @@ if shared_state["phase"] == 6:
 
     # Build maps from decrypted picks
     for user, d in shared_state["decrypted"].items():
-        for epic in d["epics"]:
+        for epic in d["epics"][:1]:
             epic_name = epic["name"].strip()
             epic_map[epic_name].append({"player": user, "rating": epic["rating"]})
 
@@ -344,4 +344,5 @@ if shared_state["phase"] == 6:
             st.write(f"{auction['type']} Pick: {auction['pick']} → Players in conflict: {auction['players']}, Ratings: {auction['ratings']}")
     else:
         st.info("No auctions / conflicts detected.")
+
 
