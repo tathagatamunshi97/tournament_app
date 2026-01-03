@@ -177,15 +177,39 @@ if shared_state["phase"] == 3:
         with st.form("commit"):
             st.subheader("🏆 Epics")
             e1 = st.text_input("Epic Priority 1")
+            r1 = st.text_input("Rating for Epic 1"
+                               
             e2 = st.text_input("Epic Priority 2")
+            r2 = st.text_input("Rating for Epic 2")
+            
             st.subheader("⭐ Featured")
+            
             f1 = st.text_input("Featured Priority 1")
+            rf1 = st.text_input("Rating for Featured 1")
+            
             f2 = st.text_input("Featured Priority 2")
+            rf2 = st.text_input("Rating for Featured 2")
+            
             f3 = st.text_input("Featured Priority 3")
+            rf3 = st.text_input("Rating for Featured 3")
+            
             f4 = st.text_input("Featured Priority 4")
+            rf4 = st.text_input("Rating for Featured 4")
+            
             password = st.text_input("Confirm Password", type="password")
             if st.form_submit_button("Encrypt & Submit"):
-                payload = {"epics": [e1, e2], "featured": [f1, f2, f3, f4]}
+                payload = {
+                            "epics": [
+                                {"name": e1, "rating": r1},
+                                {"name": e2, "rating": r2}
+                            ],
+                            "featured": [
+                                {"name": f1, "rating": rf1},
+                                {"name": f2, "rating": rf2},
+                                {"name": f3, "rating": rf3},
+                                {"name": f4, "rating": rf4}
+                            ]
+                          }
                 shared_state["encrypted_picks"][user] = encrypt(payload, password)
                 auto_advance(shared_state)
                 save_state(shared_state)
@@ -227,26 +251,96 @@ if shared_state["phase"] == 5:
             except:
                 st.error("Wrong password")
 
+# ======================= PHASE 6 : Auction Reveal ===================
 # ================= PHASE 6: REVEAL =================
 if shared_state["phase"] == 6:
     st.title("🎉 Auction Highlights")
-    epic_map = defaultdict(list)
-    featured_map = defaultdict(list)
-    for u, d in shared_state["decrypted"].items():
-        epic_map[d["epics"][0]].append(u)
-        featured_map[d["featured"][0]].append(u)
-        featured_map[d["featured"][1]].append(u)
 
+    epic_map = defaultdict(list)      # epic_name -> list of dicts {player, rating}
+    featured_map = defaultdict(list)  # featured_name -> list of dicts {player, rating}
+    auctions_list = []                # To store conflicts for global display
+
+    # Build maps from decrypted picks
+    for user, d in shared_state["decrypted"].items():
+        for epic in d["epics"]:
+            epic_name = epic["name"].strip()
+            epic_map[epic_name].append({"player": user, "rating": epic["rating"]})
+
+        for featured in d["featured"][:2]:
+            featured_name = featured["name"].strip()
+            featured_map[featured_name].append({"player": user, "rating": featured["rating"]})
+
+    # Track winners and budget
+    player_budget = defaultdict(lambda: {"spent": 0, "epics": [], "featured": []})
+
+    # --- Epics ---
     st.subheader("🏆 Epics (Priority 1)")
-    for p, users in epic_map.items():
-        if len(users) == 1:
-            st.success(f"{p} → {users[0]}")
-        else:
-            st.warning(f"{p} → Auction between {users}")
+    for epic_name, entries in epic_map.items():
+        if len(entries) == 1:
+            entry = entries[0]
+            st.success(f"{epic_name} → {entry['player']} (Rating: {entry['rating']})")
 
-    st.subheader("⭐ Featured (Priority 1–2)")
-    for p, users in featured_map.items():
-        if len(users) == 1:
-            st.success(f"{p} → {users[0]}")
+            # Budget calculation
+            try:
+                rating_num = float(entry["rating"])
+            except:
+                rating_num = 100
+            spent = max(0, (rating_num - 100) * 10)
+            player_budget[entry["player"]]["spent"] += spent
+            player_budget[entry["player"]]["epics"].append({"name": epic_name, "rating": entry["rating"], "spent": spent})
         else:
-            st.warning(f"{p} → Auction between {users}")
+            players = [e["player"] for e in entries]
+            ratings = [e["rating"] for e in entries]
+            st.warning(f"{epic_name} → Auction between {players} (Ratings: {ratings})")
+            auctions_list.append({"pick": epic_name, "type": "Epic", "players": players, "ratings": ratings})
+
+    # --- Featured ---
+    st.subheader("⭐ Featured (Priority 1–2)")
+    for featured_name, entries in featured_map.items():
+        if len(entries) == 1:
+            entry = entries[0]
+            st.success(f"{featured_name} → {entry['player']} (Rating: {entry['rating']})")
+
+            # Budget calculation
+            try:
+                rating_num = float(entry["rating"])
+            except:
+                rating_num = 97
+            spent = max(0, (rating_num - 97) * 5)
+            player_budget[entry["player"]]["spent"] += spent
+            player_budget[entry["player"]]["featured"].append({"name": featured_name, "rating": entry["rating"], "spent": spent})
+        else:
+            players = [e["player"] for e in entries]
+            ratings = [e["rating"] for e in entries]
+            st.warning(f"{featured_name} → Auction between {players} (Ratings: {ratings})")
+            auctions_list.append({"pick": featured_name, "type": "Featured", "players": players, "ratings": ratings})
+
+    # --- Global summary ---
+    st.subheader("🌐 Player Budgets & Picks")
+    global_summary = []
+    for player, data in player_budget.items():
+        remaining = 100 - data["spent"]
+        summary = {
+            "player": player,
+            "spent": data["spent"],
+            "remaining": remaining,
+            "epics_won": [(e["name"], e["rating"], e["spent"]) for e in data["epics"]],
+            "featured_won": [(f["name"], f["rating"], f["spent"]) for f in data["featured"]]
+        }
+        global_summary.append(summary)
+
+    # Display player budgets
+    for summary in global_summary:
+        st.write(f"**{summary['player']}**: Spent = {summary['spent']}, Remaining = {summary['remaining']}")
+        if summary["epics_won"]:
+            st.write("Epics Won:", summary["epics_won"])
+        if summary["featured_won"]:
+            st.write("Featured Won:", summary["featured_won"])
+
+    # --- Display auctions list ---
+    st.subheader("⚡ Auctions List (Conflicts)")
+    if auctions_list:
+        for auction in auctions_list:
+            st.write(f"{auction['type']} Pick: {auction['pick']} → Players in conflict: {auction['players']}, Ratings: {auction['ratings']}")
+    else:
+        st.info("No auctions / conflicts detected.")
