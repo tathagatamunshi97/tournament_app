@@ -177,7 +177,7 @@ if shared_state["phase"] == 3:
         with st.form("commit"):
             st.subheader("🏆 Epics")
             e1 = st.text_input("Epic Priority 1")
-            r1 = st.text_input("Rating for Epic 1"
+            r1 = st.text_input("Rating for Epic 1")
                                
             e2 = st.text_input("Epic Priority 2")
             r2 = st.text_input("Rating for Epic 2")
@@ -344,3 +344,4 @@ if shared_state["phase"] == 6:
             st.write(f"{auction['type']} Pick: {auction['pick']} → Players in conflict: {auction['players']}, Ratings: {auction['ratings']}")
     else:
         st.info("No auctions / conflicts detected.")
+
