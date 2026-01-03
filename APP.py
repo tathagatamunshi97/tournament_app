@@ -46,26 +46,38 @@ if "is_admin" not in st.session_state:
 
 # ================= AUTO ADVANCE =================
 def auto_advance(state):
-    # Phase 1 -> 2: admin locked
-    if state["phase"] == 1 and state["admin_locked"]:
-        state["phase"] = 2
+    users = state["users"]
+    total_players = len(users)
 
-    # Phase 2 -> 3: at least one player confirmed
+    # Phase 1 → 2: Admin lock only
+    if state["phase"] == 1:
+        if state["admin_locked"]:
+            state["phase"] = 2
+        return
+
+    # Phase 2 → 3: All players confirmed
     if state["phase"] == 2:
-        if any(u["confirmed"] for u in state["users"].values()):
+        if total_players > 0 and all(u["confirmed"] for u in users.values()):
             state["phase"] = 3
+        return
 
-    # Phase 3 -> 4: all picks submitted
-    if state["phase"] == 3 and len(state["encrypted_picks"]) == len(state["users"]):
-        state["phase"] = 4
+    # Phase 3 → 4: All players committed picks
+    if state["phase"] == 3:
+        if len(state["encrypted_picks"]) == total_players:
+            state["phase"] = 4
+        return
 
-    # Phase 4 -> 5: all approved
-    if state["phase"] == 4 and set(state["approved"]) == set(state["users"].keys()):
-        state["phase"] = 5
+    # Phase 4 → 5: All players approved reveal
+    if state["phase"] == 4:
+        if set(state["approved"]) == set(users.keys()):
+            state["phase"] = 5
+        return
 
-    # Phase 5 -> 6: all decrypted
-    if state["phase"] == 5 and len(state["decrypted"]) == len(state["users"]):
-        state["phase"] = 6
+    # Phase 5 → 6: All players decrypted
+    if state["phase"] == 5:
+        if len(state["decrypted"]) == total_players:
+            state["phase"] = 6
+        return
 
 auto_advance(shared_state)
 save_state(shared_state)
@@ -536,3 +548,4 @@ if shared_state["phase"] == 8:
 
     if not remaining_auctions:
         st.success("🎉 All Featured auctions resolved!")
+
