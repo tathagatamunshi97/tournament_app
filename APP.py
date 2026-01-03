@@ -85,7 +85,7 @@ if shared_state["phase"] == 1:
                     shared_state["users"][new_user] = {"password_hash": None, "confirmed": False}
                     save_state(shared_state)
                     st.success(f"Added {new_user}")
-                    st.experimental_rerun()
+                    st.rerun()
 
             if shared_state["users"]:
                 st.subheader("Current Players")
@@ -99,7 +99,7 @@ if shared_state["phase"] == 1:
                     auto_advance(shared_state)
                     save_state(shared_state)
                     st.success("Player list locked")
-                    st.experimental_rerun()
+                    st.rerun()
         else:
             st.info("Player list locked. Waiting for players to confirm.")
             st.write(list(shared_state["users"].keys()))
@@ -126,7 +126,7 @@ def player_login():
         else:
             st.session_state.current_user = user
             st.success(f"Logged in as {user}")
-            st.experimental_rerun()
+            st.rerun()
     st.stop()
 
 # ================= PHASE 2: PLAYER CONFIRM =================
@@ -147,7 +147,7 @@ if shared_state["phase"] == 2:
                 auto_advance(shared_state)
                 save_state(shared_state)
                 st.success("Registration confirmed")
-                st.experimental_rerun()
+                st.rerun()
     else:
         st.info("Already confirmed")
     st.subheader("Confirmed Players")
@@ -177,7 +177,7 @@ if shared_state["phase"] == 3:
                 auto_advance(shared_state)
                 save_state(shared_state)
                 st.success("Picks locked")
-                st.experimental_rerun()
+                st.rerun()
 
 # ================= PHASE 4: APPROVE =================
 if shared_state["phase"] == 4:
@@ -192,7 +192,7 @@ if shared_state["phase"] == 4:
             auto_advance(shared_state)
             save_state(shared_state)
             st.success("Approved")
-            st.experimental_rerun()
+            st.rerun()
 
     st.write("Approved so far:", shared_state["approved"])
 
@@ -210,7 +210,7 @@ if shared_state["phase"] == 5:
                 auto_advance(shared_state)
                 save_state(shared_state)
                 st.success("Decrypted successfully")
-                st.experimental_rerun()
+                st.rerun()
             except:
                 st.error("Wrong password")
 
