@@ -346,3 +346,193 @@ if shared_state["phase"] == 6:
         st.info("No auctions / conflicts detected.")
 
 
+# ================= PHASE 7: EPIC AUCTIONS =================
+if shared_state["phase"] == 7:
+    st.title("⚔️ Epic Auctions")
+
+    if "final_epics" not in shared_state:
+        shared_state["final_epics"] = defaultdict(list)
+
+    if "resolved_auctions" not in shared_state:
+        shared_state["resolved_auctions"] = []
+
+    remaining_auctions = []
+
+    for idx, auction in enumerate(shared_state["auctions"]):
+        if auction["type"] != "Epic":
+            continue
+
+        epic_name = auction["pick"]
+        players = auction["players"]
+
+        st.subheader(f"🏆 Epic: {epic_name}")
+        st.write("Players in conflict:", players)
+
+        with st.form(f"auction_{idx}"):
+            winner = st.selectbox("Auction Winner", players)
+            bid = st.number_input("Winning Bid Amount", min_value=0, step=1)
+            submit = st.form_submit_button("Commit Auction Result")
+
+            if submit:
+                # 1️⃣ Assign epic to winner
+                shared_state["final_epics"][winner].append({
+                    "name": epic_name,
+                    "source": "auction",
+                    "spent": bid
+                })
+
+                shared_state["player_budget"][winner]["spent"] += bid
+
+                # 2️⃣ Process remaining players
+                remaining_players = [p for p in players if p != winner]
+                next_conflicts = defaultdict(list)
+
+                for player in remaining_players:
+                    # Find next available epic priority
+                    epics = shared_state["decrypted"][player]["epics"]
+
+                    for epic in epics:
+                        if epic["name"] == epic_name:
+                            continue
+
+                        epic_pick = epic["name"]
+                        rating = epic["rating"]
+                        next_conflicts[epic_pick].append({
+                            "player": player,
+                            "rating": rating
+                        })
+                        break
+
+                # 3️⃣ Resolve next conflicts
+                for epic_pick, entries in next_conflicts.items():
+                    if len(entries) == 1:
+                        entry = entries[0]
+                        rating_num = float(entry["rating"])
+                        spent = max(0, (rating_num - 100) * 10)
+
+                        shared_state["final_epics"][entry["player"]].append({
+                            "name": epic_pick,
+                            "source": "priority",
+                            "rating": entry["rating"],
+                            "spent": spent
+                        })
+                        shared_state["player_budget"][entry["player"]]["spent"] += spent
+                    else:
+                        # New auction needed
+                        remaining_auctions.append({
+                            "pick": epic_pick,
+                            "type": "Epic",
+                            "players": [e["player"] for e in entries],
+                            "ratings": [e["rating"] for e in entries]
+                        })
+
+                shared_state["resolved_auctions"].append(epic_name)
+                st.success(f"Auction resolved for {epic_name}")
+                st.rerun()
+
+        if epic_name not in shared_state["resolved_auctions"]:
+            remaining_auctions.append(auction)
+
+    # Update auction list
+    shared_state["auctions"] = remaining_auctions
+
+    # Phase completion check
+    if not remaining_auctions:
+        st.success("🎉 All Epic auctions resolved!")
+        st.info("You can now proceed to the next phase.")
+# ================= PHASE 8: FEATURED AUCTIONS =================
+if shared_state["phase"] == 8:
+    st.title("⚔️ Featured Auctions")
+
+    if "final_featured" not in shared_state:
+        shared_state["final_featured"] = defaultdict(list)
+
+    if "resolved_featured_auctions" not in shared_state:
+        shared_state["resolved_featured_auctions"] = []
+
+    remaining_auctions = []
+
+    for idx, auction in enumerate(shared_state["auctions"]):
+        if auction["type"] != "Featured":
+            continue
+
+        featured_name = auction["pick"]
+        players = auction["players"]
+
+        st.subheader(f"⭐ Featured: {featured_name}")
+        st.write("Players in conflict:", players)
+
+        with st.form(f"featured_auction_{idx}"):
+            winner = st.selectbox("Auction Winner", players)
+            bid = st.number_input("Winning Bid Amount", min_value=0, step=1)
+            submit = st.form_submit_button("Commit Auction Result")
+
+            if submit:
+                # 1️⃣ Assign featured to winner
+                if len(shared_state["final_featured"][winner]) < 2:
+                    shared_state["final_featured"][winner].append({
+                        "name": featured_name,
+                        "source": "auction",
+                        "spent": bid
+                    })
+                    shared_state["player_budget"][winner]["spent"] += bid
+
+                # 2️⃣ Process remaining players
+                remaining_players = [
+                    p for p in players
+                    if p != winner and len(shared_state["final_featured"][p]) < 2
+                ]
+
+                next_conflicts = defaultdict(list)
+
+                for player in remaining_players:
+                    featured_list = shared_state["decrypted"][player]["featured"]
+
+                    for featured in featured_list:
+                        fname = featured["name"]
+                        rating = featured["rating"]
+
+                        # Skip already owned
+                        owned = [f["name"] for f in shared_state["final_featured"][player]]
+                        if fname == featured_name or fname in owned:
+                            continue
+
+                        next_conflicts[fname].append({
+                            "player": player,
+                            "rating": rating
+                        })
+                        break
+
+                # 3️⃣ Resolve cascades
+                for fname, entries in next_conflicts.items():
+                    if len(entries) == 1:
+                        entry = entries[0]
+                        rating_num = float(entry["rating"])
+                        spent = max(0, (rating_num - 97) * 5)
+
+                        shared_state["final_featured"][entry["player"]].append({
+                            "name": fname,
+                            "source": "priority",
+                            "rating": entry["rating"],
+                            "spent": spent
+                        })
+                        shared_state["player_budget"][entry["player"]]["spent"] += spent
+                    else:
+                        remaining_auctions.append({
+                            "pick": fname,
+                            "type": "Featured",
+                            "players": [e["player"] for e in entries],
+                            "ratings": [e["rating"] for e in entries]
+                        })
+
+                shared_state["resolved_featured_auctions"].append(featured_name)
+                st.success(f"Auction resolved for {featured_name}")
+                st.rerun()
+
+        if featured_name not in shared_state["resolved_featured_auctions"]:
+            remaining_auctions.append(auction)
+
+    shared_state["auctions"] = remaining_auctions
+
+    if not remaining_auctions:
+        st.success("🎉 All Featured auctions resolved!")
