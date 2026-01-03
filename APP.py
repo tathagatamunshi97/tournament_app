@@ -107,36 +107,24 @@ if shared_state["phase"] == 1:
         st.warning("Admin-only page")
         st.write(list(shared_state["users"].keys()))
 
-# ================= PLAYER LOGIN =================
+# ================= PLAYER LOGIN / REGISTRATION =================
 def player_login():
     if st.session_state.current_user:
         return st.session_state.current_user
 
     st.subheader("🔐 Player Login")
     user = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        record = shared_state["users"].get(user)
-        if not record:
-            st.error("User not registered")
-        elif not record["confirmed"]:
-            st.error("Registration not confirmed yet")
-        elif record["password_hash"] and hashlib.sha256(password.encode()).hexdigest() != record["password_hash"]:
-            st.error("Wrong password")
-        else:
-            st.session_state.current_user = user
-            st.success(f"Logged in as {user}")
-            st.rerun()
-    st.stop()
-
-# ================= PHASE 2: PLAYER CONFIRM =================
-if shared_state["phase"] == 2:
-    st.title("🔐 Player Registration Confirmation")
-    user = player_login()
-    record = shared_state["users"][user]
+    if not user:
+        st.stop()
+    
+    record = shared_state["users"].get(user)
+    if not record:
+        st.error("User not registered")
+        st.stop()
 
     if not record["confirmed"]:
-        password = st.text_input("Set Password", type="password")
+        # Show registration form
+        password = st.text_input("Set Your Password", type="password")
         if st.button("Confirm Registration"):
             if not password:
                 st.error("Password required")
@@ -148,10 +136,18 @@ if shared_state["phase"] == 2:
                 save_state(shared_state)
                 st.success("Registration confirmed")
                 st.rerun()
+        st.stop()
     else:
-        st.info("Already confirmed")
-    st.subheader("Confirmed Players")
-    st.write([u for u, v in shared_state["users"].items() if v["confirmed"]])
+        # Confirm login for already registered users
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            if hashlib.sha256(password.encode()).hexdigest() != record["password_hash"]:
+                st.error("Wrong password")
+            else:
+                st.session_state.current_user = user
+                st.success(f"Logged in as {user}")
+                st.rerun()
+        st.stop()
 
 # ================= PHASE 3: COMMIT PICKS =================
 if shared_state["phase"] == 3:
